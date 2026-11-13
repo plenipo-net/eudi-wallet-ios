@@ -25,21 +25,35 @@ jobs:
         run: |
           sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
           xcodebuild -version
-      - name: Unit tests of logic-core
-        working-directory: Modules/logic-core
-        run: |
-          DEST="platform=iOS Simulator,name=$(xcrun simctl list devices available iPhone -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["name"] for r in d.values() for x in r if x["name"].startswith("iPhone")))')"
-          xcodebuild test -scheme logic-core -destination "$DEST" -only-testing:logic-coreTests/TestPlenipoMandateDomain | tail -40
       - name: Simulator build of the app
+        shell: bash
         run: |
+          set -o pipefail
           xcodebuild build -project EudiReferenceWallet.xcodeproj -scheme "EUDI Wallet Dev" \
-            -sdk iphonesimulator -configuration Debug -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO | tail -40
+            -destination "generic/platform=iOS Simulator" -configuration Debug -derivedDataPath build \
+            -skipPackagePluginValidation -skipMacroValidation CODE_SIGNING_ALLOWED=NO > build.log 2>&1 \
+            || { grep -E "error:|warning: .*fatal|failed" build.log | head -80; exit 1; }
+          tail -5 build.log
+      - name: Mapping tests (logic-core-tests/TestPlenipoMandateDomain)
+        shell: bash
+        run: |
+          set -o pipefail
+          SIM=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for r in d.values() for x in r if x["name"].startswith("iPhone")))')
+          xcodebuild test -project EudiReferenceWallet.xcodeproj -scheme "EUDI Wallet Dev" \
+            -destination "id=$SIM" -derivedDataPath build -only-testing:logic-core-tests/TestPlenipoMandateDomain \
+            -skipPackagePluginValidation -skipMacroValidation CODE_SIGNING_ALLOWED=NO > test.log 2>&1 \
+            || { grep -E "error|failed|XCTAssert" test.log | head -80; exit 1; }
+          grep -E "Test Suite|Executed" test.log | tail -5
       - name: Zip the simulator app
         run: |
-          APP=$(find build/Build/Products -name '*.app' -maxdepth 3 | head -1)
+          APP=$(find build/Build/Products/Debug-iphonesimulator -name '*.app' -maxdepth 1 | head -1)
           ditto -c -k --keepParent "$APP" plenipo-eudi-wallet-simulator.zip
       - uses: actions/upload-artifact@v4
         with:
           name: plenipo-eudi-wallet-ios-simulator
           path: plenipo-eudi-wallet-simulator.zip
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: build-logs
+          path: '*.log'

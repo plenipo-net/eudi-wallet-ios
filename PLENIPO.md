@@ -27,7 +27,7 @@ and it is not endorsed by the European Commission. Licence: EUPL-1.2, as upstrea
 
 GitHub Actions (`.github/workflows/plenipo-build.yml`, macOS 26 with Xcode 26) runs the mapping tests and
 builds the dev scheme for the simulator; the zipped `.app` is a run artifact
-(`xcrun simctl install booted EudiWallet.app`). Locally: open `EudiReferenceWallet.xcodeproj` in Xcode 26
+(`xcrun simctl install booted <app>`). Locally: open `EudiReferenceWallet.xcodeproj` in Xcode 26
 and run the "EUDI Wallet Dev" scheme.
 
 ## Try it
