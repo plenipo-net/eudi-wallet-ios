@@ -275,7 +275,7 @@ struct WalletKitConfigImpl: WalletKitConfig {
   }
 
   var supportedTransactionDataTypes: [SupportedTransactionDataType] {
-    [.qesApprovalRequest, .qesRequest]
+    [.qesApprovalRequest, .qesRequest, .plenipoMandate]
   }
 
   var trustConfiguration: TrustConfiguration {
@@ -315,7 +315,9 @@ struct WalletKitConfigImpl: WalletKitConfig {
       ],
       requireSignedMetadata: true,
       statusTrustPolicy: .warning,
-      readerTrustPolicy: .enforce,
+      // Plenipo build: the Plenipo sandbox platform is not on the EU WRPAC list, so an untrusted relying
+      // party is shown with a warning instead of being refused. Do not use this build with real credentials.
+      readerTrustPolicy: .warning,
       wrprcVpTrustPolicy: .warning,
       wrprcVciTrustPolicy: .enforce
     )

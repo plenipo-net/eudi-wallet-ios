@@ -1,0 +1,45 @@
+# Plenipo test build: the logic-core unit tests and a simulator build of the dev scheme, on macOS.
+# Device builds and TestFlight need the Plenipo Apple Developer team and are not run here yet.
+name: Plenipo build
+
+on:
+  push:
+    branches: ['plenipo/**', main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plenipo-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          xcodebuild -version
+      - name: Unit tests of logic-core
+        working-directory: Modules/logic-core
+        run: |
+          DEST="platform=iOS Simulator,name=$(xcrun simctl list devices available iPhone -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["name"] for r in d.values() for x in r if x["name"].startswith("iPhone")))')"
+          xcodebuild test -scheme logic-core -destination "$DEST" -only-testing:logic-coreTests/TestPlenipoMandateDomain | tail -40
+      - name: Simulator build of the app
+        run: |
+          xcodebuild build -project EudiReferenceWallet.xcodeproj -scheme "EUDI Wallet Dev" \
+            -sdk iphonesimulator -configuration Debug -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO | tail -40
+      - name: Zip the simulator app
+        run: |
+          APP=$(find build/Build/Products -name '*.app' -maxdepth 3 | head -1)
+          ditto -c -k --keepParent "$APP" plenipo-eudi-wallet-simulator.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plenipo-eudi-wallet-ios-simulator
+          path: plenipo-eudi-wallet-simulator.zip

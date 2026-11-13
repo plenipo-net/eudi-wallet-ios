@@ -85,6 +85,8 @@ private struct TransactionDataRowsBuilder<T: Sendable> {
         addApproval(approval, itemId: transactionId)
       case .qes(let request):
         addRequest(request, itemId: transactionId)
+      case .plenipoMandate(let mandate):
+        addPlenipoMandate(mandate, itemId: transactionId)
       case .unavailable:
         addField(
           itemId: "\(transactionId)/unavailable",
@@ -188,6 +190,64 @@ private struct TransactionDataRowsBuilder<T: Sendable> {
       )
       addField(itemId: "\(documentId)/response-uri", label: .requestTransactionDataResponseUri, value: signatureRequest.responseUri)
     }
+  }
+
+  /// Every field of a Plenipo mandate that limits the agent: the bank checks the hash of exactly these bytes.
+  /// Plenipo test build: the labels are English only.
+  private mutating func addPlenipoMandate(_ mandate: PlenipoMandateDomain, itemId: String) {
+    addType(itemId: itemId, value: .custom("Mandate for an AI agent (Plenipo)"))
+    addField(itemId: "\(itemId)/purpose", label: .custom("Purpose"), value: mandate.purpose)
+    addFields(itemId: "\(itemId)/action", label: .custom("The agent may"), values: mandate.actions)
+    if mandate.counterparties.isEmpty {
+      addField(itemId: "\(itemId)/counterparty-any", label: .custom("Only with"), value: "Any counterparty")
+    } else {
+      addFields(itemId: "\(itemId)/counterparty", label: .custom("Only with"), values: mandate.counterparties)
+    }
+    if let limits = mandate.limits {
+      addField(
+        itemId: "\(itemId)/limit-operation",
+        label: .custom("Limit per operation"),
+        value: limits.perOperation.map { Self.minorUnits($0, currency: limits.currency) }
+      )
+      addField(
+        itemId: "\(itemId)/limit-total",
+        label: .custom("Total limit"),
+        value: limits.total.map { Self.minorUnits($0, currency: limits.currency) }
+      )
+    }
+    addField(itemId: "\(itemId)/nbf", label: .custom("Valid from"), value: Self.dateTime(mandate.notBefore))
+    addField(itemId: "\(itemId)/exp", label: .custom("Valid until"), value: Self.dateTime(mandate.expiresAt))
+    addField(
+      itemId: "\(itemId)/delegation",
+      label: .custom("Delegation to other agents"),
+      value: mandate.maxDelegationDepth.map { "Allowed, up to \($0) levels" } ?? "Not allowed"
+    )
+    if let principal = mandate.legalPrincipal {
+      addField(itemId: "\(itemId)/principal", label: .custom("On behalf of (EUID)"), value: principal.euid)
+      addField(itemId: "\(itemId)/principal-role", label: .custom("In the role of"), value: principal.role)
+    }
+    addField(itemId: "\(itemId)/id", label: .custom("Mandate ID"), value: mandate.mandateId)
+    addFields(
+      itemId: "\(itemId)/data-hash-algorithm",
+      label: .requestTransactionDataHashAlgorithms,
+      values: mandate.transactionDataHashAlgorithms
+    )
+  }
+
+  private static func minorUnits(_ amount: Int64, currency: String) -> String {
+    let formatter = NumberFormatter()
+    formatter.numberStyle = .currency
+    formatter.currencyCode = currency
+    let digits = formatter.maximumFractionDigits
+    let value = NSDecimalNumber(mantissa: UInt64(amount), exponent: Int16(-digits), isNegative: false)
+    return "\(value.stringValue) \(currency)"
+  }
+
+  private static func dateTime(_ seconds: Int64) -> String {
+    let formatter = DateFormatter()
+    formatter.dateStyle = .medium
+    formatter.timeStyle = .short
+    return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(seconds)))
   }
 
   private mutating func addType(itemId: String, value: LocalizableStringKey) {
