@@ -30,7 +30,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild build -project EudiReferenceWallet.xcodeproj -scheme "EUDI Wallet Dev" \
-            -destination "generic/platform=iOS Simulator" -configuration Debug -derivedDataPath build \
+            -destination "generic/platform=iOS Simulator" -configuration "Debug Dev" -derivedDataPath build \
             -skipPackagePluginValidation -skipMacroValidation CODE_SIGNING_ALLOWED=NO > build.log 2>&1 \
             || { grep -E "error:|warning: .*fatal|failed" build.log | head -80; exit 1; }
           tail -5 build.log
@@ -40,13 +40,13 @@ jobs:
           set -o pipefail
           SIM=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for r in d.values() for x in r if x["name"].startswith("iPhone")))')
           xcodebuild test -project EudiReferenceWallet.xcodeproj -scheme "EUDI Wallet Dev" \
-            -destination "id=$SIM" -derivedDataPath build -only-testing:logic-core-tests/TestPlenipoMandateDomain \
+            -destination "id=$SIM" -configuration "Debug Dev" -derivedDataPath build -only-testing:logic-core-tests/TestPlenipoMandateDomain \
             -skipPackagePluginValidation -skipMacroValidation CODE_SIGNING_ALLOWED=NO > test.log 2>&1 \
             || { grep -E "error|failed|XCTAssert" test.log | head -80; exit 1; }
           grep -E "Test Suite|Executed" test.log | tail -5
       - name: Zip the simulator app
         run: |
-          APP=$(find build/Build/Products/Debug-iphonesimulator -name '*.app' -maxdepth 1 | head -1)
+          APP=$(find "build/Build/Products/Debug Dev-iphonesimulator" -name '*.app' -maxdepth 1 | head -1)
           ditto -c -k --keepParent "$APP" plenipo-eudi-wallet-simulator.zip
       - uses: actions/upload-artifact@v4
         with:
