@@ -18,6 +18,8 @@ import Foundation
 public enum PresentationTransactionDataDomain: Sendable, Equatable {
   case qesApproval(QesApprovalTransactionDomain)
   case qes(QesTransactionDomain)
+  /// A Plenipo mandate (`plenipo_mandate`), see `PlenipoMandateDomain`.
+  case plenipoMandate(PlenipoMandateDomain)
   case unavailable
 }
 

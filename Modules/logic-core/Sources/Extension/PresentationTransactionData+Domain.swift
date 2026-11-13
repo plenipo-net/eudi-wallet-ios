@@ -41,8 +41,9 @@ extension PresentationTransactionData.Payload {
       .qesApproval(approval.toQesApprovalTransactionDomain())
     case .qesRequest(let request):
       .qes(request.toQesTransactionDomain())
-    case .raw:
-      .unavailable
+    case .raw(let json):
+      // Only plenipo_mandate is declared as a raw type; anything it cannot show in full is declined.
+      PlenipoMandateDomain(jsonData: try? json.rawData()).map { .plenipoMandate($0) } ?? .unavailable
     }
   }
 }
