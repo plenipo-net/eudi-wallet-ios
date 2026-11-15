@@ -21,6 +21,11 @@ jobs:
   build:
     runs-on: macos-26
     timeout-minutes: 90
+    env:
+      # Signed to run locally: the simulator then gets the app's entitlements (keychain access group,
+      # app group). Unsigned (CODE_SIGNING_ALLOWED=NO) the app cannot use the Keychain and stops at
+      # "The wallet could not read its protected data".
+      SIM_SIGNING: CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER= CODE_SIGNING_REQUIRED=YES
     steps:
       - uses: actions/checkout@v4
       - name: Xcode
@@ -33,9 +38,21 @@ jobs:
           set -o pipefail
           xcodebuild build -project EudiReferenceWallet.xcodeproj -scheme "EUDI Wallet Dev" \
             -destination "generic/platform=iOS Simulator" -configuration "Debug Dev" -derivedDataPath build \
-            -skipPackagePluginValidation -skipMacroValidation ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO > build.log 2>&1 \
+            -skipPackagePluginValidation -skipMacroValidation ARCHS=arm64 ONLY_ACTIVE_ARCH=YES $SIM_SIGNING > build.log 2>&1 \
             || { grep -E "error:|warning: .*fatal|failed" build.log | head -80; exit 1; }
           tail -5 build.log
+      - name: Check the entitlements and zip the simulator app
+        shell: bash
+        run: |
+          set -o pipefail
+          APP=$(find "build/Build/Products/Debug Dev-iphonesimulator" -name '*.app' -maxdepth 1 | head -1)
+          BIN="$APP/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Info.plist")"
+          codesign -dv "$APP" 2>&1 | grep -E "Identifier|Signature"
+          # The simulator reads the entitlements from the __TEXT,__entitlements section that Xcode links in.
+          otool -X -s __TEXT __entitlements "$BIN" | xxd -r -p > simulated.xcent || true
+          codesign -d --entitlements - --xml "$APP" > signed.xcent 2>/dev/null || true
+          grep -h -A3 "keychain-access-groups" simulated.xcent signed.xcent || { echo "No keychain-access-groups entitlement in the app"; exit 1; }
+          ditto -c -k --keepParent "$APP" plenipo-eudi-wallet-simulator.zip
       - name: Mapping tests (logic-core-tests/TestPlenipoMandateDomain)
         shell: bash
         run: |
@@ -43,13 +60,9 @@ jobs:
           SIM=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(x["udid"] for r in d.values() for x in r if x["name"].startswith("iPhone")))')
           xcodebuild test -project EudiReferenceWallet.xcodeproj -scheme "EUDI Wallet Dev" \
             -destination "id=$SIM" -configuration "Debug Dev" -derivedDataPath build -only-testing:logic-core-tests/TestPlenipoMandateDomain \
-            -skipPackagePluginValidation -skipMacroValidation ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO > test.log 2>&1 \
+            -skipPackagePluginValidation -skipMacroValidation ARCHS=arm64 ONLY_ACTIVE_ARCH=YES $SIM_SIGNING > test.log 2>&1 \
             || { grep -E "error|failed|XCTAssert" test.log | head -80; exit 1; }
           grep -E "Test Suite|Executed" test.log | tail -5
-      - name: Zip the simulator app
-        run: |
-          APP=$(find "build/Build/Products/Debug Dev-iphonesimulator" -name '*.app' -maxdepth 1 | head -1)
-          ditto -c -k --keepParent "$APP" plenipo-eudi-wallet-simulator.zip
       - uses: actions/upload-artifact@v4
         with:
           name: plenipo-eudi-wallet-ios-simulator
