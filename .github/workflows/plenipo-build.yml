@@ -46,12 +46,11 @@ jobs:
         run: |
           set -o pipefail
           APP=$(find "build/Build/Products/Debug Dev-iphonesimulator" -name '*.app' -maxdepth 1 | head -1)
-          BIN="$APP/$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP/Info.plist")"
           codesign -dv "$APP" 2>&1 | grep -E "Identifier|Signature"
-          # The simulator reads the entitlements from the __TEXT,__entitlements section that Xcode links in.
-          otool -X -s __TEXT __entitlements "$BIN" | xxd -r -p > simulated.xcent || true
-          codesign -d --entitlements - --xml "$APP" > signed.xcent 2>/dev/null || true
-          grep -h -A3 "keychain-access-groups" simulated.xcent signed.xcent || { echo "No keychain-access-groups entitlement in the app"; exit 1; }
+          # The simulator reads the entitlements from the __TEXT,__entitlements section that Xcode links
+          # into the binary from <app>-Simulated.xcent: show that file, then look for the plist in the app.
+          find build/Build/Intermediates.noindex -name '*.app-Simulated.xcent' -print -exec plutil -p {} \; || true
+          grep -a -r -l "<key>keychain-access-groups</key>" "$APP" || { echo "No keychain-access-groups entitlement in $APP"; exit 1; }
           ditto -c -k --keepParent "$APP" plenipo-eudi-wallet-simulator.zip
       - name: Mapping tests (logic-core-tests/TestPlenipoMandateDomain)
         shell: bash
