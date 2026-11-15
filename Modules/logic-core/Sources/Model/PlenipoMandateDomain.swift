@@ -95,7 +95,7 @@ public extension PlenipoMandateDomain {
       Set(tx.keys).isSubset(of: transactionMembers),
       let mandate = tx["mandate"] as? [String: Any],
       Set(mandate.keys).isSubset(of: mandateMembers),
-      Self.integer(mandate["v"]) == 1,
+      mandate["v"] as? String == "0.1",
       let id = mandate["id"] as? String,
       let actions = Self.strings(mandate["actions"]), !actions.isEmpty,
       let nbf = Self.integer(mandate["nbf"]),
